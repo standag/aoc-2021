@@ -2,8 +2,10 @@ use day01;
 use day02;
 use day03;
 use day04;
+use day05;
 use day07;
 use day08;
+use day09;
 
 fn main() {
     let mut args = std::env::args();
@@ -21,10 +23,14 @@ fn main() {
         (3, 2) => day03::solve_part_2(),
         (4, 1) => day04::solve_part_1(),
         (4, 2) => day04::solve_part_2(),
+        (5, 1) => day05::solve_part_1(),
+        (5, 2) => day05::solve_part_2(),
         (7, 1) => day07::solve_part_1(),
         (7, 2) => day07::solve_part_2(),
         (8, 1) => day08::solve_part_1(),
         (8, 2) => day08::solve_part_2(),
+        (9, 1) => day09::solve_part_1(),
+        (9, 2) => day09::solve_part_2(),
         _ => (),
     }
 }
