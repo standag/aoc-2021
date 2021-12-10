@@ -1,0 +1,8 @@
+parantheses = {"(" ~ x* ~ ")"}
+curly_brackets = {"{" ~ x* ~ "}" }
+brackets = {"[" ~ x* ~ "]"}
+angle_brackets = {"<" ~ x* ~ ">"}
+
+x = _{ parantheses | curly_brackets | brackets | angle_brackets }
+
+y = {SOI ~ x* ~ EOI}

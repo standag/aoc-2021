@@ -139,7 +139,7 @@ fn _solve_part_2(heightmap: &Grid) -> usize {
         .map(|min| heightmap.find_basin(min).len())
         .collect();
     x.sort_by(|a, b| b.cmp(a));
-    x[..3].iter().product()
+    x.iter().take(3).product()
 }
 
 fn read_heightmap(filename: &str) -> Grid {
