@@ -27,14 +27,23 @@ struct LinkedPoint {
     value: usize,
     neighbors: Vec<Rc<LinkedPoint>>,
 }
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Path {
-    points: Vec<Point>,
-    alternative_paths: Vec<Path>,
+    points: Vec<Rc<LinkedPoint>>,
+    lenght: usize,
 }
+
 impl Path {
-    fn len(&self) -> usize {
-        self.points.iter().map(|p| p.value).sum()
+    fn from_points(points: &Vec<Rc<LinkedPoint>>) -> Self {
+        Path {
+            points: points.to_vec(),
+            lenght: points[1..].iter().map(|p| p.value).sum(),
+        }
+    }
+    fn push(&mut self, point: &Rc<LinkedPoint>) {
+        self.points.push(Rc::clone(point));
+        self.lenght += point.value;
     }
 }
 
@@ -45,74 +54,62 @@ struct Graph {
 }
 
 impl Graph {
-    fn find_path(&self) -> Vec<Rc<LinkedPoint>> {
-        let mut paths = vec![vec![Rc::clone(&self.start)]];
+    fn find_path(&self) -> Path {
+        let mut paths = vec![Path::from_points(&vec![Rc::clone(&self.start)])];
+        let mut explored_paths: Vec<Path> = vec![];
         loop {
-            // I can get with extension of any path or creating a new path from already existing
-            // one
-            let mut potential_extended_paths: HashSet<Vec<Rc<LinkedPoint>>> = paths
+            let last_path = paths.last().unwrap().clone();
+            let last_point = last_path.points.last().unwrap();
+            let mut neighbors: Vec<Rc<LinkedPoint>> = last_point
+                .neighbors
                 .iter()
-                .map(|p| {
-                    let mut np = p.to_vec();
-                    np.push(Rc::clone(
-                        p.last()
-                            .unwrap()
-                            .neighbors
-                            .iter()
-                            .filter(|n| !np.contains(n))
-                            .reduce(|acc, p| if acc.value < p.value { acc } else { p })
-                            .unwrap(),
-                    ));
-                    np
-                })
+                .filter(|p| !last_path.points.contains(p))
+                .map(|p| Rc::clone(p))
                 .collect();
-            for path in &paths {
-                for i in 0..path.len() - 1 {
-                    let mut np = path[0..=i].to_vec();
-                    let new_point = np
-                        .last()
-                        .unwrap()
-                        .neighbors
-                        .iter()
-                        .filter(|n| !np.contains(n))
-                        .filter(|n| !paths.iter().flatten().any(|p| &p == n))
-                        .reduce(|acc, p| if acc.value < p.value { acc } else { p });
-                    if let Some(p) = new_point {
-                        np.push(Rc::clone(p));
-                        potential_extended_paths.insert(np);
-                    }
-                }
+            neighbors.sort_by_key(|p| p.value);
+            let mut extended_path = last_path.clone();
+            extended_path.push(&neighbors[0]);
+            // if last path extend about new point is shortest
+            if explored_paths.len() == 0
+                || extended_path.lenght < explored_paths.last().unwrap().lenght
+            {
+                paths.pop();
+                paths.push(extended_path);
+                neighbors = neighbors[1..].to_vec();
             }
-            let mut pep = potential_extended_paths.iter().collect::<Vec<_>>();
-            pep.sort_by_key(|path| path.iter().map(|p| p.value).sum::<usize>());
-            println!(
-                "{:?}",
-                pep.iter()
-                    .map(|path| path.iter().map(|p| p.value).sum::<usize>())
-                    .collect::<Vec<_>>()
-            );
-            let finalist = pep.first().unwrap().to_vec();
-            paths.retain(|p| p != &finalist[0..finalist.len() - 1]);
-            paths.push(finalist);
-            println!(
-                ">>graph>pahts {:?}",
-                paths
+            // there is exists already explored path with shortest lenght
+            else {
+                paths.push(explored_paths.pop().unwrap());
+            }
+            neighbors.iter().for_each(|p| {
+                let mut new_explored_path = last_path.clone();
+                new_explored_path.push(&p);
+                if !explored_paths
                     .iter()
-                    .map(|p| p
-                        .iter()
-                        .map(|p| (p.x, p.y, p.value))
-                        .collect::<Vec<(usize, usize, usize)>>())
-                    .collect::<Vec<Vec<(usize, usize, usize)>>>()
-            );
-            let final_path: Vec<Vec<Rc<LinkedPoint>>> = paths
-                .iter()
-                .filter(|p| p.contains(&self.end))
-                .map(|p| p.to_vec())
-                .collect();
-            if final_path.len() > 0 {
-                break final_path.first().unwrap().to_vec();
+                    .filter(|explored_path| explored_path.points.last().unwrap() == p)
+                    .any(|explored_path| explored_path.lenght < new_explored_path.lenght)
+                {
+                    explored_paths
+                        .retain(|explored_path| explored_path.points.last().unwrap() != p);
+                    explored_paths.push(new_explored_path)
+                };
+            });
+            explored_paths.sort_by_key(|path| path.lenght);
+            explored_paths.reverse();
+            if paths.last().unwrap().points.last().unwrap() == &self.end {
+                paths.iter().for_each(|path| {
+                    println!(
+                        "Lenght: {}, path: {:?}",
+                        path.lenght,
+                        path.points
+                            .iter()
+                            .map(|point| (point.x, point.y, point.value))
+                            .collect::<Vec<(usize, usize, usize)>>()
+                    )
+                });
+                break paths.last().unwrap().clone();
             }
-            //break paths.first().unwrap().to_vec();
+            // println!("{}", paths.last().unwrap().lenght);
         }
     }
 }
@@ -175,7 +172,6 @@ impl Grid {
             .collect();
         loop {
             parents = get_parents(&parents, self, &children);
-            //children.extend(parents);
             parents.iter().for_each(|p| children.push(Rc::clone(p)));
             if parents.len() == 1 {
                 break;
@@ -224,109 +220,19 @@ fn get_parents(
         .collect()
 }
 
-fn find_path(finish: &Point, grid: &Grid, path: &Path) -> Option<Path> {
-    let mut path = path.clone();
-    let mut i = 0;
-    let final_path = loop {
-        let mut paths = vec![path.clone()];
-        path.alternative_paths
-            .iter()
-            .for_each(|p| paths.push(p.clone()));
-        for path in &mut paths {
-            let last_point = path.points.last().unwrap().clone();
-            let mut neighbors = grid.get_neighbors(&last_point);
-            neighbors.sort_by_key(|x| x.value);
-            let unvisited_neighbors: Vec<Point> = neighbors
-                .iter()
-                .filter(|x| !path.points.contains(x))
-                .map(|r| *r)
-                .collect();
-            if unvisited_neighbors.len() != 0 {
-                unvisited_neighbors[1..].iter().for_each(|point| {
-                    let mut p = path.clone();
-                    p.points.push(*point);
-                    path.alternative_paths.push(p);
-                });
-                path.points.push(unvisited_neighbors[0]);
-            }
-        }
-        let final_path: Vec<Path> = paths
-            .to_vec()
-            .iter()
-            .map(|path| {
-                let last_point = path.points.last().unwrap().clone();
-                if last_point.x == finish.x && last_point.y == finish.y {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-            .filter(|maybe_path| maybe_path.is_some())
-            .map(|some_path| some_path.unwrap().clone())
-            .collect();
-        if final_path.len() != 0 {
-            break final_path.first().unwrap().clone();
-        }
-        paths.sort_by_key(|path| path.len());
-        path = paths.first().unwrap().clone();
-        paths[1..]
-            .iter_mut()
-            .filter(|p| !path.points.contains(p.points.last().unwrap()))
-            .for_each(|p| {
-                p.points.pop();
-                p.alternative_paths = vec![];
-                if !path.alternative_paths.contains(p) {
-                    path.alternative_paths.push(p.clone());
-                }
-            });
-        if i >= 500 {
-            break path;
-        }
-        i += 1;
-    };
-    Some(final_path)
-}
-#[test]
-fn test_simple() {
-    let finish = Point {
-        x: 2,
-        y: 2,
-        value: 0,
-    };
-    let grid = Grid::from_str(&"199\n123\n964".to_string());
-    let path = Path {
-        points: vec![grid.get(0, 0)],
-        alternative_paths: vec![],
-    };
-    let finded_path = find_path(&finish, &grid, &path).unwrap();
-    assert_eq!(finded_path.len(), 11);
-}
-
-#[test]
-fn test_simple2() {
-    let grid = Grid::from_str(&"1911\n1991\n1991\n1991".to_string());
-    let path = Path {
-        points: vec![grid.get(0, 0)],
-        alternative_paths: vec![],
-    };
-    let finded_path = find_path(&grid.get(3, 3), &grid, &path).unwrap();
-    assert_eq!(finded_path.len(), 15);
-}
-
 #[test]
 fn test_test_case() {
     let grid = Grid::from_file("input_test.txt");
     let graph = grid.to_graph();
     assert_eq!(graph.start.value, 1);
-    assert_eq!(graph.find_path().iter().map(|p| p.value).sum::<usize>(), 40);
-    //    let path = Path {
-    //        points: vec![grid.get(0, 0)],
-    //        alternative_paths: vec![],
-    //    };
-    //    println!("{:?}", grid.get_right_down_corner());
-    //    let finded_path = find_path(&grid.get_right_down_corner(), &grid, &path).unwrap();
-    //    println!("{:?}", finded_path.points);
-    //    assert_eq!(finded_path.len(), 40);
+    assert_eq!(graph.find_path().lenght, 40);
+}
+
+#[test]
+fn test_first_part() {
+    let grid = Grid::from_file("input.txt");
+    let graph = grid.to_graph();
+    assert_eq!(graph.find_path().lenght, 40);
 }
 
 #[test]
@@ -336,22 +242,15 @@ fn test_graph() {
     assert_eq!(graph.start.value, 1);
 }
 #[test]
-fn test_simple_with_graph() {
+fn test_simple() {
     let grid = Grid::from_str(&"199\n123\n964".to_string());
     let graph = grid.to_graph();
     let path = graph.find_path();
-    assert_eq!(path.iter().map(|p| p.value).sum::<usize>(), 11);
+    assert_eq!(path.lenght, 10);
 }
 #[test]
-fn test_simple2_with_graph() {
+fn test_simple2() {
     let grid = Grid::from_str(&"1911\n1991\n1991\n1991".to_string());
     let graph = grid.to_graph();
-    let path = graph.find_path();
-    println!(
-        "{:?}",
-        path.iter()
-            .map(|p| (p.x, p.y, p.value))
-            .collect::<Vec<(usize, usize, usize)>>()
-    );
-    assert_eq!(graph.find_path().iter().map(|p| p.value).sum::<usize>(), 15);
+    assert_eq!(graph.find_path().lenght, 14);
 }
