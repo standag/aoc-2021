@@ -2,7 +2,7 @@
 use anyhow::{bail, Result};
 use itertools::Itertools;
 use std::collections::HashSet;
-use std::fs::read_to_string;
+use std::fs;
 use std::iter::FromIterator;
 
 pub fn solve_part_1() {}
@@ -38,6 +38,12 @@ impl Point {
         let y = (self.y - other.y) as f64;
         let z = (self.z - other.z) as f64;
         (x.powi(2) + y.powi(2) + z.powi(2)).sqrt()
+    }
+    fn manhattan_distance(&self, other: &Self) -> usize {
+        let x = (self.x - other.x).abs();
+        let y = (self.y - other.y).abs();
+        let z = (self.z - other.z).abs();
+        (x + y + z) as usize
     }
     fn coord(&self) -> Vec<isize> {
         vec![self.x, self.y, self.z]
@@ -218,6 +224,74 @@ fn calc_distance_matrix(points: &Vec<Point>) -> Vec<(usize, usize, f64)> {
         .collect()
 }
 
+fn calc_distance_matrix_manhattan(points: &Vec<Point>) -> Vec<(usize, usize, usize)> {
+    let ids: Vec<usize> = (0..points.len()).collect();
+    ids.iter()
+        .combinations(2)
+        .map(|ps| {
+            (
+                *ps[0],
+                *ps[1],
+                points[*ps[0]].manhattan_distance(&points[*ps[1]]),
+            )
+        })
+        .collect()
+}
+
+fn map_from_input() -> Map {
+    let mut beacons = vec![];
+    let mut buffer = vec![];
+
+    let input_file = fs::read_to_string("input.txt").unwrap();
+    let data = input_file.split("\n").for_each(|line| {
+        let numbers = line.split(",").collect::<Vec<_>>();
+        if numbers.len() == 3 {
+            buffer.push(
+                numbers
+                    .iter()
+                    .map(|n| n.parse::<isize>().unwrap())
+                    .collect::<Vec<_>>(),
+            );
+        }
+        if line.is_empty() {
+            beacons.push(buffer.clone());
+            buffer = vec![];
+        }
+    });
+    let mut map = Map::new(beacons.first().unwrap());
+    let mut skipped = vec![];
+    println!("{:?}", beacons.first().unwrap());
+    beacons.iter().skip(1).enumerate().for_each(|(i, b)| {
+        println!("{} beacons: {:?}", i, b);
+        match map.add(b) {
+            Ok(_) => (),
+            Err(_) => skipped.push(b),
+        }
+        // map.add(b).expect("cannot add beacons to map");
+    });
+
+    println!("Skipped: {}", skipped.len());
+    let mut skipped2 = vec![];
+    skipped.iter().enumerate().for_each(|(i, s)| {
+        println!("{} skipped beacons: {:?}", i, s);
+        match map.add(s) {
+            Ok(_) => (),
+            Err(_) => skipped2.push(s),
+        }
+    });
+    println!("Skipped in wave 2: {}", skipped2.len());
+    let mut skipped3 = vec![];
+    skipped2.iter().enumerate().for_each(|(i, s)| {
+        println!("{} skipped beacons: {:?}", i, s);
+        match map.add(s) {
+            Ok(_) => (),
+            Err(_) => skipped3.push(s),
+        }
+    });
+    println!("Skipped in wave 3: {}", skipped3.len());
+    map
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -396,57 +470,14 @@ mod tests {
 
     #[test]
     fn part_one() {
-        // let map = Map::new(beacons)
-        let mut beacons = vec![];
-        let mut buffer = vec![];
-
-        let input_file = fs::read_to_string("input.txt").unwrap();
-        let data = input_file.split("\n").for_each(|line| {
-            let numbers = line.split(",").collect::<Vec<_>>();
-            if numbers.len() == 3 {
-                buffer.push(
-                    numbers
-                        .iter()
-                        .map(|n| n.parse::<isize>().unwrap())
-                        .collect::<Vec<_>>(),
-                );
-            }
-            if line.is_empty() {
-                beacons.push(buffer.clone());
-                buffer = vec![];
-            }
-        });
-        let mut map = Map::new(beacons.first().unwrap());
-        let mut skipped = vec![];
-        println!("{:?}", beacons.first().unwrap());
-        beacons.iter().skip(1).enumerate().for_each(|(i, b)| {
-            println!("{} beacons: {:?}", i, b);
-            match map.add(b) {
-                Ok(_) => (),
-                Err(_) => skipped.push(b),
-            }
-            // map.add(b).expect("cannot add beacons to map");
-        });
-
-        println!("Skipped: {}", skipped.len());
-        let mut skipped2 = vec![];
-        skipped.iter().enumerate().for_each(|(i, s)| {
-            println!("{} skipped beacons: {:?}", i, s);
-            match map.add(s) {
-                Ok(_) => (),
-                Err(_) => skipped2.push(s),
-            }
-        });
-        println!("Skipped in wave 2: {}", skipped2.len());
-        let mut skipped3 = vec![];
-        skipped2.iter().enumerate().for_each(|(i, s)| {
-            println!("{} skipped beacons: {:?}", i, s);
-            match map.add(s) {
-                Ok(_) => (),
-                Err(_) => skipped3.push(s),
-            }
-        });
-        println!("Skipped in wave 3: {}", skipped3.len());
-        assert_eq!(map.beacons.len(), 1);
+        let map = map_from_input();
+        assert_eq!(map.beacons.len(), 459);
+    }
+    #[test]
+    fn part_two() {
+        let map = map_from_input();
+        let dm = calc_distance_matrix_manhattan(&map.scanners);
+        let m = dm.iter().map(|d| d.2).fold(0, |acc, d| acc.max(d));
+        assert_eq!(m, 19130);
     }
 }
