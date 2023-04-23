@@ -23,3 +23,4 @@ day14 = { path = "day14" }
 day15 = { path = "day15" }
 day16 = { path = "day16" }
 day18 = { path = "day18" }
+day19 = { path = "day19" }
